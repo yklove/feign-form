@@ -29,6 +29,7 @@ import feign.form.FormEncoder;
 import feign.form.MultipartFormContentProcessor;
 
 import lombok.val;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -57,6 +58,8 @@ public class SpringFormEncoder extends FormEncoder {
     val processor = (MultipartFormContentProcessor) getContentProcessor(MULTIPART);
     processor.addFirstWriter(new SpringSingleMultipartFileWriter());
     processor.addFirstWriter(new SpringManyMultipartFilesWriter());
+    processor.addFirstWriter(new SpringSingleFilePartWriter());
+    processor.addFirstWriter(new SpringManyFilePartsWriter());
   }
 
   @Override
@@ -80,6 +83,25 @@ public class SpringFormEncoder extends FormEncoder {
         data.put(file.getName(), file);
       }
       super.encode(data, MAP_STRING_WILDCARD, template);
+    } else if (bodyType.equals(FilePart[].class)) {
+      val files = (FilePart[]) object;
+      val data = new HashMap<String, Object>(files.length, 1.F);
+      for (val file : files) {
+        data.put(file.name(), file);
+      }
+      super.encode(data, MAP_STRING_WILDCARD, template);
+    } else if (bodyType.equals(FilePart.class)) {
+      val file = (FilePart) object;
+      val data = singletonMap(file.name(), object);
+      super.encode(data, MAP_STRING_WILDCARD, template);
+    } else if (isFilePartCollection(object)) {
+      val iterable = (Iterable<?>) object;
+      val data = new HashMap<String, Object>();
+      for (val item : iterable) {
+        val file = (FilePart) item;
+        data.put(file.name(), file);
+      }
+      super.encode(data, MAP_STRING_WILDCARD, template);
     } else {
       super.encode(object, bodyType, template);
     }
@@ -92,5 +114,14 @@ public class SpringFormEncoder extends FormEncoder {
     val iterable = (Iterable<?>) object;
     val iterator = iterable.iterator();
     return iterator.hasNext() && iterator.next() instanceof MultipartFile;
+  }
+
+  private boolean isFilePartCollection (Object object) {
+    if (!(object instanceof Iterable)) {
+      return false;
+    }
+    val iterable = (Iterable<?>) object;
+    val iterator = iterable.iterator();
+    return iterator.hasNext() && iterator.next() instanceof FilePart;
   }
 }
